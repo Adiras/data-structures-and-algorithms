@@ -1,0 +1,401 @@
+#include <iostream>
+#include <utility>
+#include <vector>
+#include <algorithm>
+#include <list>
+#include <math.h>
+#define INF 2147483647
+
+using namespace std;
+
+template<class T>
+class FibonacciHeap
+{
+public:
+    struct node
+    {
+    public:
+        T key;
+        node *parent;
+        node *left;
+        node *right;
+        node *child;
+        bool mark;
+        int degree;
+
+        node(T key)
+        {
+            this->key    = key;
+            this->parent = nullptr;
+            this->left   = nullptr;
+            this->right  = nullptr;
+            this->child  = nullptr;
+            this->mark   = false;
+            this->degree = -1;
+        }
+    };
+private:
+    int size;
+    node *min;
+public:
+    FibonacciHeap()
+    {
+        this->size = 0;
+        this->min = nullptr;
+    }
+
+
+    bool empty() {
+        return size == 0;
+    }
+
+    T& top() {
+        return min->key;
+    }
+
+    void delete_node(node *arg)
+    {
+        node *curr = arg;
+        while(true) {
+            if (curr->left != nullptr && curr->left != arg) {
+                node *temp = curr;
+                curr = curr->left;
+                if (temp->child) delete_node(temp->child);
+                delete temp;
+            } else {
+                if (curr->child) delete_node(curr->child);
+                delete curr;
+                break;
+            }
+        }
+    }
+
+    void decrease_key(node* arg, T key) {
+        node* temp;
+        if (arg->key < key) return;
+
+        arg->key = key;
+        temp = arg->parent;
+        if (temp != nullptr && arg->key < temp->key) {
+            cut(arg,temp);
+            cut_from(temp);
+        }
+
+        if (arg->key < min->key) {
+            min = arg;
+        }
+    }
+
+    void insert(node *arg) {
+        size++;
+
+        arg->degree = 0;
+        arg->parent = nullptr;
+        arg->child  = nullptr;
+        arg->mark   = false;
+
+        if (min != nullptr) {
+            min->left->right = arg;
+            arg->left        = min->left;
+            min->left        = arg;
+            arg->right       = min;
+
+            if (arg->key < min->key) {
+                min = arg;
+            }
+        } else {
+            min = arg->left = arg->right = arg;
+        }
+    }
+
+    node* extract_min()
+    {
+        node **child_list;
+        node *left, *right, *next;
+
+        if (min == nullptr) return nullptr;
+
+        left = min;
+        right = left->child;
+
+        if (right != nullptr) {
+            child_list = new node*[left->degree];
+            next = right;
+            for (int i = 0; i < left->degree; ++i) {
+                child_list[i] = next;
+                next = next->right;
+            }
+
+            for (int i = 0; i < left->degree; ++i) {
+                right = child_list[i];
+                min->left->right = right;
+                right->left = min->left;
+                min->left = right;
+                right->right = min;
+                right->parent = nullptr;
+            }
+            delete [] child_list;
+        }
+
+        left->left->right = left->right;
+        left->right->left = left->left;
+
+        if (left == left->right) {
+            min = nullptr;
+        } else {
+            min = left->right;
+            consolidate();
+        }
+        size--;
+
+        return left;
+    }
+
+    void consolidate()
+    {
+        node *next, *a, *b, *c, *temp;
+        node **arr, **root_list;
+
+        int index, root;
+        int max_degree = floor(log((size))/log((1 + sqrt((5)))/2));
+
+        arr = new node*[max_degree + 2];
+        for (int i = 0; i < max_degree + 2; ++i) {
+            arr[i] = nullptr;
+        }
+
+        c = min;
+        root = 0;
+        next = c;
+        do {
+            root++;
+            next = next->right;
+        } while (c != next);
+
+        root_list = new node*[root];
+
+        for (int i = 0; i < root; ++i) {
+            root_list[i] = next;
+            next = next->right;
+        }
+
+        for (int i = 0; i < root; ++i) {
+            c = root_list[i];
+            a = c;
+            index = a->degree;
+            while (arr[index] != nullptr) {
+                b = arr[index];
+                if (b->key < a->key) {
+                    temp = a;
+                    a = b;
+                    b = temp;
+                }
+                link(b, a);
+                arr[index] = nullptr;
+                index++;
+            }
+            arr[index] = a;
+        }
+
+        delete [] root_list;
+        min = nullptr;
+
+        for (int i = 0; i < max_degree + 2; ++i) {
+            if (arr[i] != nullptr) {
+                if (min == nullptr) {
+                    min = arr[i]->left = arr[i]->right = arr[i];
+                } else {
+                    min->left->right = arr[i];
+                    arr[i]->left     = min->left;
+                    min->left        = arr[i];
+                    arr[i]->right    = min;
+                    if (min->key >= arr[i]->key) {
+                        min = arr[i];
+                    }
+                }
+            }
+        }
+    }
+
+    void link(node *a, node *b) {
+        a->left->right = a->right;
+        a->right->left = a->left;
+
+        if (b->child == nullptr) {
+            b->child = a;
+            a->right = a;
+            a->left  = a;
+        } else {
+            b->child->left->right = a;
+            a->left               = b->child->left;
+            b->child->left        = a;
+            a->right              = b->child;
+        }
+
+        b->degree++;
+        a->parent = b;
+        a->mark   = false;
+    }
+
+    void cut(node* a, node* b)
+    {
+        if (a->right == a) {
+            b->child = nullptr;
+        } else {
+            a->right->left = a->left;
+            a->left->right = a->right;
+            if (b->child == a) {
+                b->child = a->right;
+            }
+        }
+
+        b->degree--;
+        min->right->left = a;
+        a->right = min->right;
+        min->right = a;
+
+        a->left   = min;
+        a->parent = nullptr;
+        a->mark   = false;
+    }
+
+    void cut_from(node *arg) {
+        if (arg->parent == nullptr) return;
+
+        node* temp;
+        temp = arg->parent;
+        if (!arg->mark) arg->mark = true;
+        else {
+            cut(arg, temp);
+            cut_from(temp);
+        }
+    }
+
+    void pop() {
+        if (size == 0) return;
+        node *x = extract_min();
+        if (!x) return;
+        delete x;
+    }
+
+    node* push(T key) {
+        node *x = new node(key);
+        insert(x);
+        return x;
+    }
+};
+
+class Graph
+{
+private:
+    int vertices;
+    vector<pair<int, int>> *adjacency_list;
+public:
+    Graph(int vertices)
+    {
+        this->vertices = vertices;
+        this->adjacency_list = new vector<pair<int, int>>[vertices];
+    }
+
+    bool is_edge(int a, int b)
+    {
+        for (auto & it : adjacency_list[a])
+            if (it.first == b) return true;
+        return false;
+    }
+
+    void add_edge(int a, int b, int w)
+    {
+        adjacency_list[a].push_back(make_pair(b, w));
+        adjacency_list[b].push_back(make_pair(a, w));
+    }
+
+    int get_weight(int a, int b)
+    {
+        for (auto & it : adjacency_list[a])
+            if (it.first == b) return it.second;
+    }
+
+    int dijkstra(int src, int dst)
+    {
+
+        FibonacciHeap<pair<int, int>> queue;
+        vector<int> dist(vertices, INF);
+        queue.push(make_pair(0, src));
+        dist[src] = 0;
+        while (!queue.empty()) {
+            int u = queue.top().second;
+            queue.pop();
+            for (auto it = adjacency_list[u].begin(); it != adjacency_list[u].end(); ++it) {
+                int v = it->first;
+                int weight = it->second;
+
+                if (dist[v] > dist[u] + weight) {
+                    dist[v] = dist[u] + weight;
+                    queue.push(make_pair(dist[v], v));
+                }
+            }
+        }
+        return dist[dst];
+    }
+};
+
+int main()
+{
+    ios::sync_with_stdio(false);
+
+    int n;
+    cin >> n;
+
+    pair<int, int> coordinates[n];
+
+    for (int i = 0; i < n; ++i) {
+        int x, y;
+        cin >> x >> y;
+        coordinates[i] = make_pair(x, y);
+    }
+
+    int s, d;
+    cin >> s >> d;
+
+    vector<pair<int, int>> input_x, input_y;
+    for (int i = 0; i < n; ++i) {
+        input_x.emplace_back(i, coordinates[i].first);
+        input_y.emplace_back(i, coordinates[i].second);
+    }
+
+    sort(input_x.begin(), input_x.end(),
+         [](const pair<int, int> & a, const pair<int, int> & b) -> bool {
+             return a.second < b.second;
+         });
+
+    sort(input_y.begin(), input_y.end(),
+         [](const pair<int, int> & a, const pair<int, int> & b) -> bool {
+             return a.second < b.second;
+         });
+
+    Graph g(n);
+
+    for (auto it = input_x.begin(); it != input_x.end() - 1; ++it) {
+        int a = (it + 0)->first;
+        int b = (it + 1)->first;
+        int weight = abs((it+0)->second - (it+1)->second);
+        g.add_edge(a, b, weight);
+    }
+
+    for (auto it = input_y.begin(); it != input_y.end() - 1; ++it) {
+        int a = (it + 0)->first;
+        int b = (it + 1)->first;
+        int weight = abs((it + 0)->second - (it + 1)->second);
+        if (g.is_edge(a, b)) {
+            if (g.get_weight(a, b) > weight)
+                g.add_edge(a, b, weight);
+        } else {
+            g.add_edge(a, b, weight);
+        }
+    }
+
+    cout << g.dijkstra(s, d);
+
+    return 0;
+}
